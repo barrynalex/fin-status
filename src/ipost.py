@@ -1,4 +1,5 @@
 import logging
+import ddddocr
 from time import sleep
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -18,9 +19,9 @@ def main():
     driver = login(driver)
     sleep(10)
 
-
     ntd_num = driver.find_element(By.XPATH, '//*[@id="fms01002:grid_DataGridBody"]/tbody/tr[3]/td[3]').text
     foreign_num = driver.find_element(By.XPATH, '//*[@id="fms01003:grid_DataGridBody"]/tbody/tr[4]/td[3]/span[2]').text
+
     logging.info(f"ntd_num:{ntd_num}\nforeign_num:{foreign_num}")
 
     input("Press Enter to quit.....")
@@ -31,18 +32,29 @@ def main():
 def login(driver):
     driver = update_chrome()
 
-    driver.get("https://ebank.esunbank.com.tw/index.jsp")
-    iframe = driver.find_element(By.ID, 'iframe1')
-    driver.switch_to.frame(iframe)
+    driver.get("https://ipost.post.gov.tw/pst/home.html")
+    # iframe = driver.find_element(By.ID, 'iframe1')
+    # driver.switch_to.frame(iframe)
+
+    # locate all the elements
     driver.implicitly_wait(20)
-    custid_box = driver.find_element(By.ID, "loginform:custid")
-    name_box = driver.find_element(By.ID, "loginform:name")
-    pwd_box = driver.find_element(By.ID, "loginform:pxsswd")
-    login_button = driver.find_element(By.ID, "loginform:linkCommand")
+    custid_box = driver.find_element(By.ID, "cifID")
+    name_box = driver.find_element(By.ID, "userID_1_Input")
+    pwd_box = driver.find_element(By.ID, "userPWD_1_Input")
+    login_button = driver.find_element(By.CLASS_NAME, "loginbtn")
+    image_element = driver.find_element(By.XPATH, '//*[@id="tab1"]/div[14]/img')
+    image_element.screenshot("code_image.png")
+    validation_box = driver.find_element(By.XPATH, '//*[@id="tab1"]/div[11]/input')
+
+    ocr = ddddocr.DdddOcr()
+
+    image = open("code_image.png", "rb").read()
+    code = ocr.classification(image)
 
     custid_box.send_keys(ID)
     name_box.send_keys(esun_userid)
     pwd_box.send_keys(esun_password)
+    validation_box.send_keys(code)
     login_button.click()
 
     return driver
