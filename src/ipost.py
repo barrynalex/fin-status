@@ -7,7 +7,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support import expected_conditions as EC
-from credential.credential import esun_userid, esun_password, ID
+from credential.credential import ipost_userid, ipost_password, ID
 
 # chrome driver path
 # chromedriver = "/usr/local/bin/chromedriver"
@@ -17,17 +17,16 @@ def main():
     driver = update_chrome()
     #login to bank account
     driver = login(driver)
-    sleep(10)
+    # sleep(10)
 
-    ntd_num = driver.find_element(By.XPATH, '//*[@id="fms01002:grid_DataGridBody"]/tbody/tr[3]/td[3]').text
-    foreign_num = driver.find_element(By.XPATH, '//*[@id="fms01003:grid_DataGridBody"]/tbody/tr[4]/td[3]/span[2]').text
+    ntd_num = driver.find_element(By.XPATH, '//*[@id="css_table2"]/div[2]/div[3]/span').text
 
-    logging.info(f"ntd_num:{ntd_num}\nforeign_num:{foreign_num}")
+    logging.info(f"ntd_num:{ntd_num}")
 
     input("Press Enter to quit.....")
     driver.quit()
 
-    return ntd_num, foreign_num
+    # return ntd_num, foreign_num
 
 def login(driver):
     driver = update_chrome()
@@ -38,10 +37,15 @@ def login(driver):
 
     # locate all the elements
     driver.implicitly_wait(20)
+
+    pop_up_element = driver.find_element(By.XPATH, '//*[@id="modal"]/div[2]/button')
+    pop_up_element.click()
+    sleep(3)
+
     custid_box = driver.find_element(By.ID, "cifID")
     name_box = driver.find_element(By.ID, "userID_1_Input")
     pwd_box = driver.find_element(By.ID, "userPWD_1_Input")
-    login_button = driver.find_element(By.CLASS_NAME, "loginbtn")
+    login_button = driver.find_element(By.XPATH, '//*[@id="tab1"]/div[12]/a')
     image_element = driver.find_element(By.XPATH, '//*[@id="tab1"]/div[14]/img')
     image_element.screenshot("code_image.png")
     validation_box = driver.find_element(By.XPATH, '//*[@id="tab1"]/div[11]/input')
@@ -52,8 +56,8 @@ def login(driver):
     code = ocr.classification(image)
 
     custid_box.send_keys(ID)
-    name_box.send_keys(esun_userid)
-    pwd_box.send_keys(esun_password)
+    name_box.send_keys(ipost_userid)
+    pwd_box.send_keys(ipost_password)
     validation_box.send_keys(code)
     login_button.click()
 
