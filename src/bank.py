@@ -7,8 +7,8 @@ from selenium import webdriver
 from dotenv import load_dotenv
 
 class Bank():
-    def __init__(self, name):
-        self.name = name
+    def __init__(self):
+        self.name = self.__class__.__name__.lower()
         self.driver = self.get_driver()
         info = self.get_info()
         for key, value in info.items():

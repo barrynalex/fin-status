@@ -10,17 +10,17 @@ from selenium.webdriver.support import expected_conditions as EC
 # chrome driver path
 # chromedriver = "/usr/local/bin/chromedriver"
 
-class ipost(Bank):
+class Ipost(Bank):
     def get_number(self):
         self.login()
-        sleep(10)
+        sleep(5)
 
         ntd_num = self.driver.find_element(By.XPATH, '//*[@id="css_table2"]/div[2]/div[3]/span').text
 
         logging.info(f"ntd_num:{ntd_num}")
 
         # input("Press Enter to quit.....")
-        self.driver.quit()
+        self.close_driver()
 
         return ntd_num
 
@@ -72,7 +72,11 @@ class ipost(Bank):
                 print(alert.text)
                 alert.accept()
                 replace_image_button.click()
-                sleep(10)
+                sleep(5)
+                custid_box.clear()
+                name_box.clear()
+                pwd_box.clear()
+                validation_box.clear()
             except Exception as e:
                 print(e)
                 logging.info(f"{self.name} login successful!!")
@@ -87,5 +91,5 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s %(levelname)s:%(message)s", level=logging.INFO
     )
-    client = ipost("ipost")
+    client = Ipost()
     ntd_num = client.get_number()

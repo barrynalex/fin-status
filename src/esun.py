@@ -1,28 +1,24 @@
 import logging
 from time import sleep
 from bank import Bank
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 
 # chrome driver path
 # chromedriver = "/usr/local/bin/chromedriver"
 
-class esun(Bank):
+class Esun(Bank):
     def get_number(self):
         self.login()
         sleep(10)
 
         ntd_num = self.driver.find_element(By.XPATH, '//*[@id="fms01002:grid_DataGridBody"]/tbody/tr[3]/td[3]').text
-        foreign_num = self.driver.find_element(By.XPATH, '//*[@id="fms01003:grid_DataGridBody"]/tbody/tr[4]/td[3]/span[2]').text
-        logging.info(f"ntd_num:{ntd_num}\nforeign_num:{foreign_num}")
+        # foreign_num = self.driver.find_element(By.XPATH, '//*[@id="fms01003:grid_DataGridBody"]/tbody/tr[4]/td[3]/span[2]').text
+        logging.info(f"ntd_num:{ntd_num}")
 
         # input("Press Enter to quit.....")
-        self.driver.quit()
+        self.close_driver()
 
-        return ntd_num, foreign_num
+        return ntd_num
 
     def login(self):
         driver = self.driver
@@ -47,5 +43,5 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s %(levelname)s:%(message)s", level=logging.INFO
     )
-    client = esun("esun")
-    twd_number, foreign_number = client.get_number()
+    client = Esun()
+    twd_number = client.get_number()
