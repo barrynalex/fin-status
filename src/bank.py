@@ -33,6 +33,7 @@ class Bank():
 
         options = Options()
         options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--user-data-dir=~/fin-status/my-user-profile")
 
         # Initialize the driver with the service object
         driver = webdriver.Chrome(service=service, options=options)
