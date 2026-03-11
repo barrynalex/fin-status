@@ -86,7 +86,9 @@ class Binance:
         return data if isinstance(data, list) else []
 
     def get_number(self) -> float:
-        asset_qty: dict[str, float] = {}
+        spot_assets: dict[str, float] = {}
+        simple_earn_assets: dict[str, float] = {}
+        futures_assets: dict[str, float] = {}
 
         # 1) Spot balances
         for b in self._spot_balances():
@@ -97,9 +99,9 @@ class Binance:
                 continue
 
             asset = (b.get("asset") or "").upper()
-            asset_qty[asset] = asset_qty.get(asset, 0.0) + qty
+            spot_assets[asset] = spot_assets.get(asset, 0.0) + qty
 
-        # 2) Simple Earn flexible positions (map to LD{asset} if present, else asset)
+        # 2) Simple Earn flexible positions
         try:
             positions = self._simple_earn_flexible_positions()
             for p in positions:
@@ -107,14 +109,7 @@ class Binance:
                 amount = float(p.get("totalAmount", p.get("total", 0)) or 0)
                 if amount <= 0 or not asset:
                     continue
-
-                ld_asset = f"LD{asset}"
-                if ld_asset in asset_qty:
-                    # Convert LD asset bucket back to base asset to avoid missed pricing
-                    asset_qty[ld_asset] -= amount
-                    if asset_qty[ld_asset] <= 1e-12:
-                        asset_qty.pop(ld_asset, None)
-                asset_qty[asset] = asset_qty.get(asset, 0.0) + amount
+                simple_earn_assets[asset] = simple_earn_assets.get(asset, 0.0) + amount
         except Exception as e:
             logging.warning(f"simple earn fetch failed, continue with spot/futures only: {e}")
 
@@ -125,18 +120,32 @@ class Binance:
                 qty = float(b.get("balance", 0) or 0)
                 if qty <= 0 or not asset:
                     continue
-                asset_qty[asset] = asset_qty.get(asset, 0.0) + qty
+                futures_assets[asset] = futures_assets.get(asset, 0.0) + qty
         except Exception as e:
             logging.warning(f"futures balance fetch failed, continue with spot/simple earn only: {e}")
 
-        total_usd = 0.0
-        for asset, qty in asset_qty.items():
-            if qty <= 0:
-                continue
-            px = self._price_usdt(asset.replace("LD", ""))
-            total_usd += qty * px
+        def subtotal_usd(asset_map: dict[str, float]) -> float:
+            s = 0.0
+            for asset, qty in asset_map.items():
+                if qty <= 0:
+                    continue
+                px = self._price_usdt(asset.replace("LD", ""))
+                s += qty * px
+            return s
 
-        logging.info(f"binance total usd={total_usd:.2f}")
+        spot_usd = subtotal_usd(spot_assets)
+        simple_earn_usd = subtotal_usd(simple_earn_assets)
+        futures_usd = subtotal_usd(futures_assets)
+        total_usd = spot_usd + simple_earn_usd + futures_usd
+
+        logging.info(
+            "binance breakdown usd | spot=%.2f simple_earn=%.2f futures=%.2f total=%.2f",
+            spot_usd,
+            simple_earn_usd,
+            futures_usd,
+            total_usd,
+        )
+
         return round(total_usd, 2)
 
 
