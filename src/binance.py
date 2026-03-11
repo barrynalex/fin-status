@@ -14,11 +14,18 @@ class Binance:
     def __init__(self):
         load_dotenv()
         self.name = self.__class__.__name__.lower()
-        self.api_key = os.getenv("binance_userid")
-        self.api_secret = os.getenv("binance_password")
+        # Preferred env names
+        self.api_key = os.getenv("BINANCE_API_KEY")
+        self.api_secret = os.getenv("BINANCE_API_SECRET")
+
+        # Backward-compatible fallback to legacy names
+        if not self.api_key:
+            self.api_key = os.getenv("binance_userid")
+        if not self.api_secret:
+            self.api_secret = os.getenv("binance_password")
 
         if not self.api_key or not self.api_secret:
-            raise ValueError("binance_userid and binance_password are required in .env")
+            raise ValueError("BINANCE_API_KEY and BINANCE_API_SECRET are required in .env")
 
     def _signed_get(self, path: str, params: dict | None = None):
         params = params or {}

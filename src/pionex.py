@@ -14,10 +14,18 @@ class Pionex:
     def __init__(self):
         load_dotenv()
         self.name = self.__class__.__name__.lower()
-        self.api_key = os.getenv("pionex_userid")
-        self.api_secret = os.getenv("pionex_password")
+        # Preferred env names
+        self.api_key = os.getenv("PIONEX_API_KEY")
+        self.api_secret = os.getenv("PIONEX_API_SECRET")
+
+        # Backward-compatible fallback to legacy names
+        if not self.api_key:
+            self.api_key = os.getenv("pionex_userid")
+        if not self.api_secret:
+            self.api_secret = os.getenv("pionex_password")
+
         if not self.api_key or not self.api_secret:
-            raise ValueError("pionex_userid and pionex_password are required")
+            raise ValueError("PIONEX_API_KEY and PIONEX_API_SECRET are required")
 
     def _generate_signature(self, method: str, path: str, query_string: str = "") -> str:
         # IMPORTANT: path must start with '/', and include '?' before query if present
