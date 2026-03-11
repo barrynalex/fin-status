@@ -7,7 +7,8 @@ import requests
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 
-BASE_URL = "https://api.binance.com"
+SPOT_BASE_URL = "https://api.binance.com"
+FUTURES_BASE_URL = "https://fapi.binance.com"
 
 
 class Binance:
@@ -27,12 +28,12 @@ class Binance:
         if not self.api_key or not self.api_secret:
             raise ValueError("BINANCE_API_KEY and BINANCE_API_SECRET are required in .env")
 
-    def _signed_get(self, path: str, params: dict | None = None):
+    def _signed_get(self, path: str, params: dict | None = None, base_url: str = SPOT_BASE_URL):
         params = params or {}
         params["timestamp"] = int(time.time() * 1000)
         query = urlencode(params)
         signature = hmac.new(self.api_secret.encode(), query.encode(), hashlib.sha256).hexdigest()
-        url = f"{BASE_URL}{path}?{query}&signature={signature}"
+        url = f"{base_url}{path}?{query}&signature={signature}"
         headers = {"X-MBX-APIKEY": self.api_key}
         r = requests.get(url, headers=headers, timeout=15)
         r.raise_for_status()
@@ -40,11 +41,11 @@ class Binance:
 
     def _price_usdt(self, asset: str) -> float:
         asset = asset.upper()
-        if asset in {"USDT", "USD", "USDC", "BUSD"}:
+        if asset in {"USDT", "USD", "USDC", "BUSD", "FDUSD", "TUSD", "USDP"}:
             return 1.0
 
         symbol = f"{asset}USDT"
-        url = f"{BASE_URL}/api/v3/ticker/price?symbol={symbol}"
+        url = f"{SPOT_BASE_URL}/api/v3/ticker/price?symbol={symbol}"
         r = requests.get(url, timeout=10)
         if r.status_code != 200:
             return 0.0
@@ -54,20 +55,85 @@ class Binance:
         except Exception:
             return 0.0
 
-    def get_number(self) -> float:
+    def _spot_balances(self):
         account = self._signed_get("/api/v3/account")
-        balances = account.get("balances", [])
+        return account.get("balances", [])
 
-        total_usd = 0.0
-        for b in balances:
+    def _simple_earn_flexible_positions(self):
+        rows = []
+        page = 1
+        size = 100
+
+        while True:
+            data = self._signed_get(
+                "/sapi/v1/simple-earn/flexible/position",
+                {"current": page, "size": size},
+                base_url=SPOT_BASE_URL,
+            )
+            current_rows = data.get("rows", []) or []
+            rows.extend(current_rows)
+
+            total = int(data.get("total", len(rows)))
+            if len(rows) >= total or not current_rows:
+                break
+            page += 1
+
+        return rows
+
+    def _futures_balances(self):
+        # USDⓈ-M futures wallet balances
+        data = self._signed_get("/fapi/v3/balance", base_url=FUTURES_BASE_URL)
+        return data if isinstance(data, list) else []
+
+    def get_number(self) -> float:
+        asset_qty: dict[str, float] = {}
+
+        # 1) Spot balances
+        for b in self._spot_balances():
             free = float(b.get("free", 0))
             locked = float(b.get("locked", 0))
             qty = free + locked
             if qty <= 0:
                 continue
 
-            asset = b.get("asset", "")
-            px = self._price_usdt(asset)
+            asset = (b.get("asset") or "").upper()
+            asset_qty[asset] = asset_qty.get(asset, 0.0) + qty
+
+        # 2) Simple Earn flexible positions (map to LD{asset} if present, else asset)
+        try:
+            positions = self._simple_earn_flexible_positions()
+            for p in positions:
+                asset = (p.get("asset") or "").upper()
+                amount = float(p.get("totalAmount", p.get("total", 0)) or 0)
+                if amount <= 0 or not asset:
+                    continue
+
+                ld_asset = f"LD{asset}"
+                if ld_asset in asset_qty:
+                    # Convert LD asset bucket back to base asset to avoid missed pricing
+                    asset_qty[ld_asset] -= amount
+                    if asset_qty[ld_asset] <= 1e-12:
+                        asset_qty.pop(ld_asset, None)
+                asset_qty[asset] = asset_qty.get(asset, 0.0) + amount
+        except Exception as e:
+            logging.warning(f"simple earn fetch failed, continue with spot/futures only: {e}")
+
+        # 3) USDⓈ-M futures wallet balances
+        try:
+            for b in self._futures_balances():
+                asset = (b.get("asset") or "").upper()
+                qty = float(b.get("balance", 0) or 0)
+                if qty <= 0 or not asset:
+                    continue
+                asset_qty[asset] = asset_qty.get(asset, 0.0) + qty
+        except Exception as e:
+            logging.warning(f"futures balance fetch failed, continue with spot/simple earn only: {e}")
+
+        total_usd = 0.0
+        for asset, qty in asset_qty.items():
+            if qty <= 0:
+                continue
+            px = self._price_usdt(asset.replace("LD", ""))
             total_usd += qty * px
 
         logging.info(f"binance total usd={total_usd:.2f}")
