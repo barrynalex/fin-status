@@ -87,7 +87,6 @@ class Binance:
 
     def get_number(self) -> float:
         spot_assets: dict[str, float] = {}
-        simple_earn_assets: dict[str, float] = {}
         futures_assets: dict[str, float] = {}
 
         # 1) Spot balances
@@ -101,19 +100,7 @@ class Binance:
             asset = (b.get("asset") or "").upper()
             spot_assets[asset] = spot_assets.get(asset, 0.0) + qty
 
-        # 2) Simple Earn flexible positions
-        try:
-            positions = self._simple_earn_flexible_positions()
-            for p in positions:
-                asset = (p.get("asset") or "").upper()
-                amount = float(p.get("totalAmount", p.get("total", 0)) or 0)
-                if amount <= 0 or not asset:
-                    continue
-                simple_earn_assets[asset] = simple_earn_assets.get(asset, 0.0) + amount
-        except Exception as e:
-            logging.warning(f"simple earn fetch failed, continue with spot/futures only: {e}")
-
-        # 3) USDⓈ-M futures wallet balances
+        # 2) USDⓈ-M futures wallet balances
         try:
             for b in self._futures_balances():
                 asset = (b.get("asset") or "").upper()
@@ -134,14 +121,12 @@ class Binance:
             return s
 
         spot_usd = subtotal_usd(spot_assets)
-        simple_earn_usd = subtotal_usd(simple_earn_assets)
         futures_usd = subtotal_usd(futures_assets)
-        total_usd = spot_usd + simple_earn_usd + futures_usd
+        total_usd = spot_usd + futures_usd
 
         logging.info(
-            "binance breakdown usd | spot=%.2f simple_earn=%.2f futures=%.2f total=%.2f",
+            "binance breakdown usd | spot=%.2f futures=%.2f total=%.2f",
             spot_usd,
-            simple_earn_usd,
             futures_usd,
             total_usd,
         )
