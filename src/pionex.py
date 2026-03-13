@@ -3,18 +3,29 @@ import os
 import hmac
 import hashlib
 import time
+import logging
 from urllib.parse import urlencode
-from bank import Bank
+from dotenv import load_dotenv
 
 base_url = "https://api.pionex.com"
+binance_price_url = "https://api.binance.com/api/v3/ticker/price"
 
-class Pionex(Bank):
+class Pionex:
     def __init__(self):
+        load_dotenv()
         self.name = self.__class__.__name__.lower()
-        self.api_key = os.getenv("pionex_userid")
-        self.api_secret = os.getenv("pionex_password")
+        # Preferred env names
+        self.api_key = os.getenv("PIONEX_API_KEY")
+        self.api_secret = os.getenv("PIONEX_API_SECRET")
+
+        # Backward-compatible fallback to legacy names
+        if not self.api_key:
+            self.api_key = os.getenv("pionex_userid")
+        if not self.api_secret:
+            self.api_secret = os.getenv("pionex_password")
+
         if not self.api_key or not self.api_secret:
-            raise ValueError("PI_API_KEY and PI_API_SECRET environment variables are required")
+            raise ValueError("PIONEX_API_KEY and PIONEX_API_SECRET are required")
 
     def _generate_signature(self, method: str, path: str, query_string: str = "") -> str:
         # IMPORTANT: path must start with '/', and include '?' before query if present
@@ -56,24 +67,42 @@ class Pionex(Bank):
         resp.raise_for_status()
         return resp.json()
 
-    def get_balance(self):
+    def _price_usdt(self, coin: str) -> float:
+        coin = (coin or "").upper()
+        if coin in {"USDT", "USD", "USDC", "BUSD"}:
+            return 1.0
+
+        symbol = f"{coin}USDT"
+        r = requests.get(binance_price_url, params={"symbol": symbol}, timeout=10)
+        if r.status_code != 200:
+            return 0.0
+        try:
+            return float(r.json().get("price", 0))
+        except Exception:
+            return 0.0
+
+    def get_number(self) -> float:
         data = self._make_authenticated_request("GET", "/api/v1/account/balances")
-        # Success shape per docs: {"result": true, "data": {"balances": [...]}}
-        # Some deployments use {"code":0}. Handle both.
         ok = (data.get("result") is True) or (data.get("code") == 0)
         if not ok:
             raise Exception(f"API Error: {data.get('message') or data.get('msg') or data}")
+
         balances = (data.get("data") or {}).get("balances", [])
-        parts = []
+        total_usd = 0.0
+
         for b in balances:
-            # fields seen in docs: coin/free/frozen; sometimes asset/locked
             coin = b.get("coin") or b.get("asset") or ""
             free = float(b.get("free", 0))
             frozen = float(b.get("frozen", b.get("locked", 0)))
-            total = free + frozen
-            if total > 0:
-                parts.append(f"{coin}: {total}")
-        return " | ".join(parts) if parts else "No balance found"
+            qty = free + frozen
+            if qty <= 0:
+                continue
+
+            px = self._price_usdt(coin)
+            total_usd += qty * px
+
+        logging.info(f"pionex total usd={total_usd:.2f}")
+        return round(total_usd, 2)
 
 
 if __name__ == "__main__":
@@ -81,9 +110,9 @@ if __name__ == "__main__":
     logging.basicConfig( format="%(asctime)s %(levelname)s:%(message)s", level=logging.INFO )
     try:
         client = Pionex()
-        balance = client.get_balance()
-        print(f"Pionex Balance: {balance}")
-        logging.info(f"Successfully retrieved balance: {balance}")
+        total = client.get_number()
+        print(f"Pionex Total USD: {total}")
+        logging.info(f"Successfully retrieved total usd: {total}")
     except Exception as e:
         logging.error(f"Error retrieving balance: {e}")
         print(f"Error: {e}")
